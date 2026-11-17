@@ -25,6 +25,26 @@ const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /**
+ * Events that other modal libraries watch at `document`/`window` level to decide
+ * the user has interacted "outside" them. Radix (and so shadcn's Dialog/Sheet)
+ * dismisses on `pointerdown`/`focusin` outside its content, drags focus back on
+ * `focusin`, and react-remove-scroll cancels `wheel`/`touchmove` outside the
+ * locked element. Stopping them at our host keeps a preview opened from inside
+ * such a modal usable — and the host modal open underneath it.
+ */
+const ISOLATED_EVENTS = [
+  'pointerdown',
+  'mousedown',
+  'touchstart',
+  'touchmove',
+  'touchend',
+  'click',
+  'wheel',
+  'focusin',
+  'focusout',
+] as const;
+
+/**
  * `<file-preview-modal>` — full-screen overlay around a `<file-preview>`.
  *
  * Handles the things a modal has to get right and that are easy to get wrong:
@@ -76,6 +96,16 @@ export class FilePreviewModalElement extends HTMLElement {
 
     this.#shell = el('div', { class: 'fp-shell', part: 'shell' }, [this.#preview]);
     shadow.append(this.#backdrop, this.#shell, this.#prevBtn, this.#nextBtn, this.#counter);
+
+    // Bubble phase on the host: everything inside the shadow root has already
+    // handled the event by the time it gets here, so only listeners further up
+    // (document, window) miss it.
+    const isolate = (e: Event): void => {
+      if (this.open) e.stopPropagation();
+    };
+    for (const type of ISOLATED_EVENTS) {
+      this.addEventListener(type, isolate, { passive: true });
+    }
   }
 
   connectedCallback(): void {
@@ -132,6 +162,20 @@ export class FilePreviewModalElement extends HTMLElement {
 
     if (!this.open) {
       this.#lastFocused = document.activeElement;
+      // A host modal (Radix Dialog's hideOthers, Headless UI, …) may have hidden
+      // every body child that existed when it opened — including this reused
+      // singleton. Nothing above us should be able to hide or disable us.
+      this.removeAttribute('aria-hidden');
+      this.removeAttribute('inert');
+      // Release focus *before* taking it. Moving focus straight from a focus
+      // trap's content into us fires a focusout whose relatedTarget is us, and
+      // the trap (Radix FocusScope) answers by pulling focus back. A blur first
+      // gives a focusout with no relatedTarget, which traps deliberately ignore,
+      // and still lets the page's own blur handlers run.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && !this.contains(active)) {
+        active.blur();
+      }
       this.setAttribute('open', '');
       this.#lockScroll();
       this.#bindGlobalKeys();
@@ -191,8 +235,11 @@ export class FilePreviewModalElement extends HTMLElement {
   }
 
   #bindGlobalKeys(): void {
+    // Window capture runs before anything registered on document — including a
+    // host modal's own capture-phase Escape handler — so Escape closes only us,
+    // not the dialog we were opened from.
     this.#d.listen(
-      document,
+      window,
       'keydown',
       ((e: KeyboardEvent) => {
         if (!this.open) return;

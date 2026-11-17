@@ -34,6 +34,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`openPreview()` works from inside another library's modal.** Called from a
+  Radix/shadcn `Dialog` or `Sheet`, the preview was unusable: it inherited the
+  host's `pointer-events: none` on `<body>`, clicking it dismissed the host
+  modal, the host's focus trap pulled focus back, wheel scrolling was cancelled,
+  and Escape closed both. The modal now re-enables pointer events, keeps
+  pointer, click, wheel and focus events from bubbling past itself while open,
+  blurs the trap's focused element before taking focus, handles Escape at
+  window capture, and clears any `aria-hidden`/`inert` a host modal put on it.
 - **Images are centred in the viewport.** Two different elements both answered
   to the `.fp-stage` selector — the element's own mount point, which is
   absolutely positioned at `inset: 0`, and the image viewer's wrapper. The

@@ -787,7 +787,11 @@ export const modalCss: string = `
   display: none;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
-:host([open]) { display: block; }
+:host([open]) {
+  display: block;
+  /* A host modal (Radix) sets pointer-events:none on <body>; don't inherit it. */
+  pointer-events: auto;
+}
 
 /**
  * Full-bleed shell. Earlier this was an inset rounded card floating on a

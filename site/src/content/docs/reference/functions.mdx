@@ -25,6 +25,11 @@ handle.close();
 
 `openGallery` is an alias that reads better when you are passing an array.
 
+It is safe to call from inside another library's modal, such as a Radix or shadcn `Dialog` or
+`Sheet`. The preview stacks on top, takes focus and Escape for itself, and keeps its clicks,
+focus changes and scrolling from reaching the modal underneath, so that modal stays open. When the
+preview closes, focus goes back to the control that opened it.
+
 ## `renderPreview(target, input, options?)`
 
 Renders inline into an element or a selector, and returns the `<file-preview>` element.

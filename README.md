@@ -160,6 +160,10 @@ handle.close();
 `input` accepts a URL string, `File`, `Blob`, `ArrayBuffer`, a data URI, a descriptor object,
 or an array of any of those.
 
+Safe to call from inside a Radix/shadcn `Dialog` or `Sheet` (or a similar modal): the preview
+takes focus, pointer input, scrolling and Escape for itself, so the modal underneath stays open
+and gets focus back when the preview closes.
+
 ### `renderPreview(target, input, options?)`
 
 Renders inline into an element or selector. Returns the `<file-preview>` element.
