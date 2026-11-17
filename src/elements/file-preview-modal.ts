@@ -20,7 +20,7 @@ export interface ShowOptions {
 
 const sheet = makeStyles(modalCss);
 
-/** Elements that can hold focus, for the focus trap. */
+/** Elements that can hold focus, for initial focus placement. */
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -47,12 +47,15 @@ const ISOLATED_EVENTS = [
 /**
  * `<file-preview-modal>` — full-screen overlay around a `<file-preview>`.
  *
- * Handles the things a modal has to get right and that are easy to get wrong:
- * focus is trapped while open and restored on close, background scroll is
- * locked without the page jumping, Escape and backdrop clicks close, and arrow
- * keys move through a gallery of files.
+ * Built on a native `<dialog>` opened with `showModal()`, so the browser does
+ * the hard parts: it renders in the top layer (above any z-index, and above a
+ * host page's own modal `<dialog>`), makes the rest of the page inert so focus
+ * cannot leave, and closes on the mobile back gesture. On top of that: focus is
+ * restored on close, Escape and backdrop clicks close, and arrow keys move
+ * through a gallery of files.
  */
 export class FilePreviewModalElement extends HTMLElement {
+  readonly #dialog: HTMLDialogElement;
   readonly #preview: FilePreviewElement;
   readonly #shell: HTMLElement;
   readonly #backdrop: HTMLElement;
@@ -63,7 +66,6 @@ export class FilePreviewModalElement extends HTMLElement {
   #index = 0;
   readonly #d = disposer();
   #lastFocused: Element | null = null;
-  #scrollLock: { overflow: string; paddingRight: string } | null = null;
   #ownsSources = false;
 
   constructor() {
@@ -95,7 +97,18 @@ export class FilePreviewModalElement extends HTMLElement {
     this.#counter = el('div', { class: 'fp-counter' });
 
     this.#shell = el('div', { class: 'fp-shell', part: 'shell' }, [this.#preview]);
-    shadow.append(this.#backdrop, this.#shell, this.#prevBtn, this.#nextBtn, this.#counter);
+    this.#dialog = el('dialog', { class: 'fp-dialog', part: 'dialog' }, [
+      this.#backdrop,
+      this.#shell,
+      this.#prevBtn,
+      this.#nextBtn,
+      this.#counter,
+    ]);
+    shadow.append(this.#dialog);
+
+    // The browser can close the dialog without us: the Android back gesture and
+    // other platform close requests. Keep our state in step when it does.
+    this.#dialog.addEventListener('close', () => this.close());
 
     // Bubble phase on the host: everything inside the shadow root has already
     // handled the event by the time it gets here, so only listeners further up
@@ -109,12 +122,6 @@ export class FilePreviewModalElement extends HTMLElement {
   }
 
   connectedCallback(): void {
-    // A custom element constructor must not touch its own attributes — doing so
-    // makes document.createElement() throw outright. Set them on connect.
-    if (!this.hasAttribute('role')) this.setAttribute('role', 'dialog');
-    if (!this.hasAttribute('aria-modal')) this.setAttribute('aria-modal', 'true');
-    if (!this.hasAttribute('aria-label')) this.setAttribute('aria-label', 'File preview');
-
     this.#backdrop.addEventListener('click', () => this.close());
     this.#preview.addEventListener('fp-close', () => this.close());
     // Re-emit viewer events from the modal so callers can listen in one place.
@@ -147,6 +154,8 @@ export class FilePreviewModalElement extends HTMLElement {
    * @param input One file or a gallery of them.
    */
   show(input: PreviewInput | PreviewInput[], opts: ShowOptions = {}): this {
+    // showModal() needs a connected element; don't make callers remember that.
+    if (!this.isConnected) document.body.append(this);
     const config = getConfig();
     this.#disposeOwnSources();
     this.#items = toSources(input, {
@@ -177,7 +186,7 @@ export class FilePreviewModalElement extends HTMLElement {
         active.blur();
       }
       this.setAttribute('open', '');
-      this.#lockScroll();
+      this.#dialog.showModal();
       this.#bindGlobalKeys();
     }
 
@@ -207,6 +216,7 @@ export class FilePreviewModalElement extends HTMLElement {
   close(): void {
     if (!this.open) return;
     this.removeAttribute('open');
+    if (this.#dialog.open) this.#dialog.close();
     this.#preview.clear();
     this.#release();
     this.dispatchEvent(new CustomEvent('fp-close'));
@@ -232,6 +242,13 @@ export class FilePreviewModalElement extends HTMLElement {
     this.#prevBtn.disabled = this.#index === 0;
     this.#nextBtn.disabled = this.#index === this.#items.length - 1;
     this.#counter.textContent = many ? `${this.#index + 1} of ${this.#items.length}` : '';
+    // The host's aria-label wins; otherwise announce which file is open. A label
+    // can't point into <file-preview>'s shadow root, so this is text, not an id.
+    const label = this.getAttribute('aria-label');
+    this.#dialog.setAttribute(
+      'aria-label',
+      label ?? (source.name ? `Preview of ${source.name}` : 'File preview'),
+    );
   }
 
   #bindGlobalKeys(): void {
@@ -244,12 +261,11 @@ export class FilePreviewModalElement extends HTMLElement {
       ((e: KeyboardEvent) => {
         if (!this.open) return;
         if (e.key === 'Escape') {
+          // Handled here rather than left to the dialog's own close request so
+          // a host modal's Escape handler never sees it.
+          e.preventDefault();
           e.stopPropagation();
           this.close();
-          return;
-        }
-        if (e.key === 'Tab') {
-          this.#trapFocus(e);
           return;
         }
         // Don't hijack arrows while the user is typing in a field (the page
@@ -276,46 +292,7 @@ export class FilePreviewModalElement extends HTMLElement {
 
   #focusFirst(): void {
     const list = this.#focusables();
-    (list[0] ?? this.#shell).focus({ preventScroll: true });
-  }
-
-  #trapFocus(e: KeyboardEvent): void {
-    const list = this.#focusables();
-    const first = list[0];
-    const last = list[list.length - 1];
-    if (!first || !last) return;
-    const active = this.shadowRoot?.activeElement ?? null;
-    const deep = this.#preview.shadowRoot?.activeElement ?? active;
-
-    if (e.shiftKey && (deep === first || active === first)) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && (deep === last || active === last)) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
-  #lockScroll(): void {
-    const body = document.body;
-    // Compensate for the scrollbar so the page behind does not shift.
-    const gap = window.innerWidth - document.documentElement.clientWidth;
-    this.#scrollLock = {
-      overflow: body.style.overflow,
-      paddingRight: body.style.paddingRight,
-    };
-    body.style.overflow = 'hidden';
-    if (gap > 0) {
-      const current = parseFloat(getComputedStyle(body).paddingRight) || 0;
-      body.style.paddingRight = `${current + gap}px`;
-    }
-  }
-
-  #unlockScroll(): void {
-    if (!this.#scrollLock) return;
-    document.body.style.overflow = this.#scrollLock.overflow;
-    document.body.style.paddingRight = this.#scrollLock.paddingRight;
-    this.#scrollLock = null;
+    (list[0] ?? this.#dialog).focus({ preventScroll: true });
   }
 
   #disposeOwnSources(): void {
@@ -327,7 +304,6 @@ export class FilePreviewModalElement extends HTMLElement {
 
   #release(): void {
     this.#d.run();
-    this.#unlockScroll();
     this.#disposeOwnSources();
   }
 }

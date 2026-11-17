@@ -104,7 +104,18 @@ group('component stylesheet', () => {
     }
   });
 
-  it('ships a separate host block for the modal shell', () => {
-    expect(declare(modalCss, ':host')).toContain('position: fixed');
+  it('lets the modal host stay out of the way of its top-layer dialog', () => {
+    // A display:none host would suppress the dialog even in the top layer.
+    expect(declare(modalCss, ':host')).toContain('display: contents');
+  });
+
+  it('sizes the modal dialog to the viewport and contains scroll chaining', () => {
+    const dialog = declare(modalCss, '.fp-dialog');
+    expect(dialog).toContain('max-width: none');
+    expect(dialog).toContain('overscroll-behavior: contain');
+    expect(dialog).toContain('pointer-events: auto');
+    const backdrop = declare(modalCss, '.fp-dialog::backdrop');
+    expect(backdrop).toContain('overflow: hidden');
+    expect(backdrop).toContain('overscroll-behavior: contain');
   });
 });

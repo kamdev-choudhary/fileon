@@ -780,17 +780,39 @@ export const css: string = `
  * backdrop and the viewport-sized shell, while the inline element does not.
  */
 export const modalCss: string = `
-:host {
+/*
+ * The host only carries the light-DOM API; the <dialog> inside renders in the
+ * top layer. display: contents keeps the host from ever being the reason the
+ * dialog is hidden (a display:none ancestor would suppress it).
+ */
+:host { display: contents; }
+
+/* Full-viewport dialog. Class selector so it beats the UA's dialog:modal sizing. */
+.fp-dialog {
   position: fixed;
   inset: 0;
-  z-index: var(--fp-z, 9999);
-  display: none;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-:host([open]) {
-  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+  /* Scroll gestures inside the viewer must not chain to the page behind. */
+  overscroll-behavior: contain;
   /* A host modal (Radix) sets pointer-events:none on <body>; don't inherit it. */
   pointer-events: auto;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.fp-dialog::backdrop {
+  /* The opaque .fp-backdrop div below does the painting; this only has to be a
+     (non-scrolling) scroll container so overscroll-behavior applies over it. */
+  background: transparent;
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 /**
