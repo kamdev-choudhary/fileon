@@ -155,6 +155,7 @@ const handle = openPreview(files, {
 
 handle.go(2);
 handle.close();
+await handle.closed; // settles when the modal closes, however it was closed
 ```
 
 `input` accepts a URL string, `File`, `Blob`, `ArrayBuffer`, a data URI, a descriptor object,
@@ -305,7 +306,7 @@ Dark mode follows the OS. Force it with `theme="dark"` or `theme="light"`.
 
 Shadow parts are exposed for structural tweaks:
 `::part(toolbar)`, `::part(stage)`, `::part(content)`, `::part(controls)`,
-`::part(backdrop)`, `::part(shell)`.
+`::part(backdrop)`, `::part(shell)`, `::part(dialog)`.
 
 ---
 

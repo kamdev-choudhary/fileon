@@ -21,6 +21,7 @@ const handle = openPreview(files, {
 handle.element; // the <file-preview-modal>
 handle.go(2);
 handle.close();
+await handle.closed; // settles when the modal closes, however it was closed
 ```
 
 `openGallery` is an alias that reads better when you are passing an array.

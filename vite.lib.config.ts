@@ -17,7 +17,7 @@ export default defineConfig({
   // The site's public/ folder must not be copied into the published package.
   publicDir: false,
   build: {
-    target: 'es2020',
+    target: 'es2022',
     outDir: 'dist',
     emptyOutDir: true,
     // Vite 8 bundles with rolldown/oxc; 'esbuild' would need a separate install.

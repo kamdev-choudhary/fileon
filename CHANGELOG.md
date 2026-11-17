@@ -6,7 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The modal is a native `<dialog>` opened with `showModal()`.** It now renders
+  in the top layer, above any `z-index` and above a host page's own modal
+  `<dialog>`. The page behind is inert, and the Android back gesture closes the
+  preview. The hand-written focus trap is gone, and so is the
+  `overflow: hidden` / `padding-right` lock on `<body>`: scroll chaining is now
+  contained with `overscroll-behavior`, so the page no longer loses its
+  scrollbar or shifts. `role="dialog"` and `aria-modal` are no longer set on
+  `<file-preview-modal>` itself; the inner dialog carries them, named
+  "Preview of &lt;file name&gt;" unless the host has an `aria-label`. Calling
+  `show()` on an element that isn't in the page yet now adds it to `<body>`.
+  New `::part(dialog)`.
+- **Build target is ES2022.** `#private` fields stay native instead of being
+  rewritten into WeakMap helpers, which removes three helper chunks and makes
+  the entry 0.6 kB smaller gzipped.
+
 ### Added
+
+- **`PreviewHandle.closed`**, a promise that settles when the modal closes:
+  `await openPreview(file).closed`.
 
 - **Legacy `.doc` files preview natively.** Previously they fell through to the
   download card, because mammoth reads OOXML and `.doc` is not OOXML — it is an

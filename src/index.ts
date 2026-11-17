@@ -64,6 +64,8 @@ export interface PreviewHandle {
   element: FilePreviewModalElement;
   close(): void;
   go(index: number): void;
+  /** Settles when the modal closes, however it was closed. */
+  closed: Promise<void>;
 }
 
 /** Open a file (or a gallery) in the full-screen modal. */
@@ -75,6 +77,8 @@ export function openPreview(
   const { onLoad, onError, onClose, onChange, ...rest } = options;
 
   const cleanup: Array<() => void> = [];
+  let settle!: () => void;
+  const closed = new Promise<void>((resolve) => (settle = resolve));
 
   // Rebind per call so a second openPreview() does not accumulate listeners
   // from the first.
@@ -88,6 +92,7 @@ export function openPreview(
   const onCloseOnce = (): void => {
     while (cleanup.length) cleanup.pop()?.();
     onClose?.();
+    settle();
   };
   host.addEventListener('fp-close', onCloseOnce, { once: true });
   cleanup.push(() => host.removeEventListener('fp-close', onCloseOnce));
@@ -102,6 +107,7 @@ export function openPreview(
     element: host,
     close: () => host.close(),
     go: (i: number) => host.go(i),
+    closed,
   };
 }
 
